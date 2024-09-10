@@ -1,0 +1,61 @@
+name: Run E2E tests
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        description: 'The version of Python to use'
+        type: string
+      neo4j-edition:
+        required: true
+        description: "The Neo4j edition to use, either 'community' or 'enterprise'"
+        type: string
+
+jobs:
+  e2e-tests:
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Docker Prune
+        run: |
+          docker system prune -af
+          docker volume prune -f
+      - name: Set up Python ${{ python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ python-version }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+      - name: Set Python version for Poetry
+        run: poetry env use python${{ python-version }}
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-venv-${{ python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-cache --with dev
+      - name: Clear Poetry cache
+        run: poetry cache clear --all .
+      - name: Show disk usage after Poetry installation
+        run: |
+          df -h
+      - name: Wait for Weaviate to start
+        shell: bash
+        run: |
+          set +e
+          count=0; until curl -s --fail localhost:8080/v1/.well-known/ready; do ((count++)); [ $count -ge 10 ] && echo "Reached maximum retry limit" && exit 1; sleep 15; done
+      - name: Run tests
+        shell: bash
+        run: |
+          if [[ "${{ neo4j-edition }}" == "community" ]]; then
+              poetry run pytest -m 'not enterprise_only' ./tests/e2e
+          else
+              poetry run pytest ./tests/e2e
+          fi
