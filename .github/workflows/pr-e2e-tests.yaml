@@ -12,7 +12,6 @@ concurrency:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest
     uses: ./.github/workflows/e2e-tests.yaml
     strategy:
       matrix:
@@ -23,7 +22,7 @@ jobs:
           - enterprise
     with:
       target: ${{ matrix.python-version }}
-      python-version:  ${{ neo4j-edition }}
+      python-version:  ${{ matrix.neo4j-edition }}
     services:
       t2v-transformers:
         image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2-onnx
